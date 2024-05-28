@@ -10,10 +10,16 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="auto"
 )
-
 # Load the processor and model
-processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+# def load_model():
+#     processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+#     model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+#     return [processor, model]
+
+if "model" not in st.session_state:
+    st.session_state.model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base") # initialize the session state variable
+if "processor" not in st.session_state:
+    st.session_state.processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base") # initialize the session state variable
 
 # App title
 st.title("Image Captioning App")
@@ -35,12 +41,12 @@ if uploaded_files:
             # Preprocess the image
             # text = "A picture of"
             # inputs = processor(images=image, text=text, return_tensors="tf")
-            inputs = processor(images=image, return_tensors="tf")
+            inputs = st.session_state.processor(images=image, return_tensors="tf")
 
             # Generate caption
             # with tf.device('/CPU:0'):  # Use CPU to avoid potential issues with GPU
-            outputs = model.generate(**inputs)
+            outputs = st.session_state.model.generate(**inputs)
 
             # Decode and display the caption
-            caption = processor.decode(outputs[0], skip_special_tokens=True)
+            caption = st.session_state.processor.decode(outputs[0], skip_special_tokens=True)
             st.write(f"**Caption:** {caption}")
