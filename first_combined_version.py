@@ -8,6 +8,8 @@ import vertexai
 from vertexai.generative_models import GenerativeModel
 import vertexai.preview.generative_models as generative_models
 import os
+from io import BytesIO
+import hashlib
 
 # Streamlit app configuration
 st.set_page_config(
@@ -36,13 +38,20 @@ def generate_caption(image):
     caption = processor.decode(outputs[0], skip_special_tokens=True)
     return caption
 
+# Function to hash image
+def hash_image(image):
+    buffer = BytesIO()
+    image.save(buffer, format='PNG')
+    img_str = buffer.getvalue()
+    return hashlib.md5(img_str).hexdigest()
+
 # Function to generate the story
 def generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions):
     text1 = f"Write me a {genre} story suitable for {reader_age}-year-olds. The story should have {num_words} words and {num_characters} characters."
     for name, gender in zip(character_names, character_genders):
         text1 += f" The main character is {name}, a {gender}."
     text1 += " The story should be engaging and didactic. It should have a clear introduction, development, and a clear ending."
-    text1 += " The following captions should be used as milestones in the story: " + ", ".join(image_captions)
+    text1 += " The following captions should be integrated in the story to contribute in the story development: " + ", ".join(image_captions)
 
     generation_config = {
         "max_output_tokens": 8192,
@@ -83,6 +92,9 @@ character_genders = [gender.strip() for gender in character_genders.split(",")]
 uploaded_files = st.file_uploader("Upload up to 5 images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 image_captions = []
 
+if 'cached_captions' not in st.session_state:
+    st.session_state.cached_captions = {}
+
 if uploaded_files:
     if len(uploaded_files) > 5:
         st.warning("You can only upload up to 5 images.")
@@ -90,12 +102,24 @@ if uploaded_files:
         for uploaded_file in uploaded_files:
             # Open the image
             image = Image.open(uploaded_file)
-            # Display the image
-            st.image(image, caption='Uploaded Image', use_column_width=True)
-            # Generate and display the caption
-            caption = generate_caption(image)
+            # Hash the image
+            image_hash = hash_image(image)
+            # Check if the image has been processed before
+            if image_hash in st.session_state.cached_captions:
+                caption = st.session_state.cached_captions[image_hash]
+            else:
+                # Generate and cache the caption
+                caption = generate_caption(image)
+                st.session_state.cached_captions[image_hash] = caption
             image_captions.append(caption)
-            st.write(f"**Caption:** {caption}")
+
+        with st.expander("View uploaded images and captions"):
+            for uploaded_file, caption in zip(uploaded_files, image_captions):
+                # Open and display the image
+                image = Image.open(uploaded_file)
+                st.image(image, caption='Uploaded Image', use_column_width=True)
+                # Display the caption
+                st.write(f"**Caption:** {caption}")
 
 # Generate the story
 if st.button("Generate the story!"):
@@ -105,3 +129,4 @@ if st.button("Generate the story!"):
         generated_story = generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions)
         st.subheader("Generated Story:")
         st.write(generated_story)
+        
