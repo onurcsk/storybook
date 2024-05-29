@@ -7,6 +7,7 @@ from google.cloud import aiplatform
 import vertexai
 from vertexai.generative_models import GenerativeModel
 import vertexai.preview.generative_models as generative_models
+import os
 
 # Streamlit app configuration
 st.set_page_config(
@@ -17,7 +18,7 @@ st.set_page_config(
 )
 
 # Initialize Vertex AI
-aiplatform.init(project="tidal-mote-419711", location="europe-west1")
+aiplatform.init(project=os.environ["GOOGLE_PROJECT_ID"], location=os.environ["GOOGLE_PROJECT_REGION"])
 
 # Load the image captioning model and processor
 @st.cache(allow_output_mutation=True)
@@ -42,7 +43,7 @@ def generate_story(genre, num_words, num_characters, reader_age, character_names
         text1 += f" The main character is {name}, a {gender}."
     text1 += " The story should be engaging and didactic. It should have a clear introduction, development, and a clear ending."
     text1 += " The following captions should be used as milestones in the story: " + ", ".join(image_captions)
-    
+
     generation_config = {
         "max_output_tokens": 8192,
         "temperature": 1,
@@ -58,11 +59,11 @@ def generate_story(genre, num_words, num_characters, reader_age, character_names
     # Generate story prompt
     model = GenerativeModel("gemini-1.5-flash-001")
     responses = model.generate_content([text1], generation_config=generation_config, safety_settings=safety_settings, stream=True)
-    
+
     generated_story = ""
     for response in responses:
         generated_story += response.text
-    
+
     return generated_story
 
 # User inputs for story generation
