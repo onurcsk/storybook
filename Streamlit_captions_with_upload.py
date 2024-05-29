@@ -31,12 +31,13 @@ if uploaded_files:
     if len(uploaded_files) > 5:
         st.warning("You can only upload up to 5 images.")
     else:
+        captions = []
         for uploaded_file in uploaded_files:
             # Open the image
             image = Image.open(uploaded_file)
 
             # Display the image
-            st.image(image, caption='Uploaded Image', use_column_width=True)
+            # st.image(image, caption='Uploaded Image', use_column_width=True)
 
             # Preprocess the image
             # text = "A picture of"
@@ -49,4 +50,5 @@ if uploaded_files:
 
             # Decode and display the caption
             caption = st.session_state.processor.decode(outputs[0], skip_special_tokens=True)
-            st.write(f"**Caption:** {caption}")
+            captions.append(caption)
+        st.write(f"**Captions:** {captions}")
