@@ -7,6 +7,7 @@ from google.cloud import aiplatform
 import vertexai
 from vertexai.generative_models import GenerativeModel
 import vertexai.preview.generative_models as generative_models
+import os
 
 # Streamlit app configuration
 st.set_page_config(
@@ -17,7 +18,7 @@ st.set_page_config(
 )
 
 # Initialize Vertex AI
-aiplatform.init(project="le-wagon-bootcamp-423910", location="europe-west1")
+aiplatform.init(project=os.environ["GOOGLE_PROJECT_ID"], location=os.environ["GOOGLE_PROJECT_REGION"])
 
 # Load the image captioning model and processor
 @st.cache(allow_output_mutation=True)
