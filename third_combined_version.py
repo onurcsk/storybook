@@ -1,5 +1,4 @@
 import streamlit as st
-import requests
 from PIL import Image
 from transformers import AutoProcessor, TFBlipForConditionalGeneration
 import tensorflow as tf
@@ -47,11 +46,30 @@ def hash_image(image):
 
 # Function to generate the story
 def generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions):
-    text1 = f"Write me a {genre} story suitable for {reader_age}-year-olds. The story should have {num_words} words and {num_characters} characters."
-    for name, gender in zip(character_names, character_genders):
-        text1 += f" The main character is {name}, a {gender}."
+    text1 = "Write me a story."
+
+    if genre:
+        text1 = f"Write me a {genre} story"
+    if reader_age:
+        text1 += f" suitable for {reader_age}-year-olds"
+    if num_words:
+        text1 += f" with {num_words} words"
+    if num_characters:
+        text1 += f" and {num_characters} characters."
+    else:
+        text1 += "."
+
+    if character_names or character_genders:
+        characters_info = " The main characters are "
+        if character_names and character_genders:
+            characters_info += ", ".join([f"{name} ({gender})" if gender else name for name, gender in zip(character_names, character_genders)])
+        else:
+            characters_info += ", ".join(character_names if character_names else character_genders)
+        text1 += characters_info + "."
+    
     text1 += " The story should be engaging and didactic. It should have a clear introduction, development, and a clear ending."
-    text1 += " The following captions should be integrated in the story to contribute in the story development: " + ", ".join(image_captions)
+    if image_captions:
+        text1 += " The following captions should be integrated in the story to contribute to the story development: " + ", ".join(image_captions)
 
     generation_config = {
         "max_output_tokens": 8192,
@@ -77,16 +95,6 @@ def generate_story(genre, num_words, num_characters, reader_age, character_names
 
 # User inputs for story generation
 st.title("Image Captioning and Story Generation App")
-genre = st.text_input("Enter the genre of the story or a theme description:")
-num_words = st.number_input("Enter the number of words in the story:", min_value=1, step=1)
-num_characters = st.number_input("Enter the number of characters in the story:", min_value=1, step=1)
-reader_age = st.number_input("Enter the reader's age:", min_value=1, step=1)
-character_names = st.text_area("Enter the name(s) of the character(s), separated by commas:")
-character_genders = st.text_area("Enter the gender(s) of the character(s), separated by commas:")
-
-# Convert character names and genders to lists
-character_names = [name.strip() for name in character_names.split(",")]
-character_genders = [gender.strip() for gender in character_genders.split(",")]
 
 # Image upload and captioning
 uploaded_files = st.file_uploader("Upload up to 5 images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
@@ -94,6 +102,9 @@ image_captions = []
 
 if 'cached_captions' not in st.session_state:
     st.session_state.cached_captions = {}
+
+if 'story_history' not in st.session_state:
+    st.session_state.story_history = []
 
 if uploaded_files:
     if len(uploaded_files) > 5:
@@ -121,12 +132,65 @@ if uploaded_files:
                 # Display the caption
                 st.write(f"**Caption:** {caption}")
 
+# User inputs under a dropdown
+with st.expander("Story Settings"):
+    tab_titles = ["Story Genre or Theme", "Number of Words", "Number of Characters", "Reader's Age", "Character Names", "Character Genders"]
+    tabs = st.tabs(tab_titles)
+
+    with tabs[0]:
+        genre = st.text_input("Enter the story genre or theme description (optional):")
+    with tabs[1]:
+        num_words = st.number_input("Enter the number of words in the story (optional):", min_value=1, step=1)
+    with tabs[2]:
+        num_characters = st.number_input("Enter the number of characters in the story (optional):", min_value=1, step=1)
+    with tabs[3]:
+        reader_age = st.number_input("Enter the reader's age (optional):", min_value=1, step=1)
+    with tabs[4]:
+        character_names = st.text_area("Enter the name(s) of the character(s), separated by commas (optional):")
+    with tabs[5]:
+        character_genders = st.text_area("Enter the gender(s) of the character(s), separated by commas (optional):")
+
+# Convert character names and genders to lists
+character_names = [name.strip() for name in character_names.split(",") if name.strip()]
+character_genders = [gender.strip() for gender in character_genders.split(",") if gender.strip()]
+
 # Generate the story
 if st.button("Generate the story!"):
-    if not genre or not num_words or not num_characters or not reader_age or not character_names or not character_genders:
-        st.warning("Please fill in all the fields.")
-    else:
-        generated_story = generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions)
-        st.subheader("Generated Story:")
-        st.write(generated_story)
-        
+    generated_story = generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions)
+    
+    # Save the story and its details in the session state
+    story_details = {
+        "genre": genre,
+        "num_words": num_words,
+        "num_characters": num_characters,
+        "reader_age": reader_age,
+        "character_names": character_names,
+        "character_genders": character_genders,
+        "captions": image_captions,
+        "story": generated_story
+    }
+    
+    # Append the new story details to the history, limit to 5
+    st.session_state.story_history.append(story_details)
+    if len(st.session_state.story_history) > 5:
+        st.session_state.story_history.pop(0)
+    
+    st.subheader("Generated Story:")
+    st.write(generated_story)
+
+# Display the story history
+if st.session_state.story_history:
+    with st.expander("View Story History"):
+        tab_titles = [f"Story {i+1}" for i in range(len(st.session_state.story_history))]
+        tabs = st.tabs(tab_titles)
+
+        for idx, (tab, story_details) in enumerate(zip(tabs, st.session_state.story_history)):
+            with tab:
+                st.write(f"**Story Genre or Theme:** {story_details['genre']}")
+                st.write(f"**Number of Words:** {story_details['num_words']}")
+                st.write(f"**Number of Characters:** {story_details['num_characters']}")
+                st.write(f"**Reader's Age:** {story_details['reader_age']}")
+                st.write(f"**Character Names:** {', '.join(story_details['character_names'])}")
+                st.write(f"**Character Genders:** {', '.join(story_details['character_genders'])}")
+                st.write(f"**Captions:** {', '.join(story_details['captions'])}")
+                st.write(f"**Story:** {story_details['story']}")
