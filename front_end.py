@@ -1,14 +1,11 @@
 import streamlit as st
 from PIL import Image
-from transformers import AutoProcessor, TFBlipForConditionalGeneration
-import tensorflow as tf
-from google.cloud import aiplatform
-import vertexai
-from vertexai.generative_models import GenerativeModel
-import vertexai.preview.generative_models as generative_models
 import os
 from io import BytesIO
 import hashlib
+import requests
+
+API_HOST = os.environ['API_HOST']
 
 # Streamlit app configuration
 st.set_page_config(
@@ -18,80 +15,12 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Initialize Vertex AI
-aiplatform.init(project=os.environ["GOOGLE_PROJECT_ID"], location=os.environ["GOOGLE_PROJECT_REGION"])
-
-# Load the image captioning model and processor
-@st.cache(allow_output_mutation=True)
-def load_captioning_model():
-    model = TFBlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-    processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    return processor, model
-
-processor, model = load_captioning_model()
-
-# Function to generate image captions
-def generate_caption(image):
-    inputs = processor(images=image, return_tensors="tf")
-    outputs = model.generate(**inputs)
-    caption = processor.decode(outputs[0], skip_special_tokens=True)
-    return caption
-
 # Function to hash image
 def hash_image(image):
     buffer = BytesIO()
     image.save(buffer, format='PNG')
     img_str = buffer.getvalue()
     return hashlib.md5(img_str).hexdigest()
-
-# Function to generate the story
-def generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions):
-    text1 = "Write me a story."
-
-    if genre:
-        text1 = f"Write me a {genre} story"
-    if reader_age:
-        text1 += f" suitable for {reader_age}-year-olds"
-    if num_words:
-        text1 += f" with {num_words} words"
-    if num_characters:
-        text1 += f" and {num_characters} characters."
-    else:
-        text1 += "."
-
-    if character_names or character_genders:
-        characters_info = " The main characters are "
-        if character_names and character_genders:
-            characters_info += ", ".join([f"{name} ({gender})" if gender else name for name, gender in zip(character_names, character_genders)])
-        else:
-            characters_info += ", ".join(character_names if character_names else character_genders)
-        text1 += characters_info + "."
-    
-    text1 += " The story should be engaging and didactic. It should have a clear introduction, development, and a clear ending."
-    if image_captions:
-        text1 += " The following captions should be integrated in the story to contribute to the story development: " + ", ".join(image_captions)
-
-    generation_config = {
-        "max_output_tokens": 8192,
-        "temperature": 1,
-        "top_p": 0.95,
-    }
-    safety_settings = {
-        generative_models.HarmCategory.HARM_CATEGORY_HATE_SPEECH: generative_models.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        generative_models.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: generative_models.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        generative_models.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: generative_models.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        generative_models.HarmCategory.HARM_CATEGORY_HARASSMENT: generative_models.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    }
-
-    # Generate story prompt
-    model = GenerativeModel("gemini-1.5-flash-001")
-    responses = model.generate_content([text1], generation_config=generation_config, safety_settings=safety_settings, stream=True)
-
-    generated_story = ""
-    for response in responses:
-        generated_story += response.text
-
-    return generated_story
 
 # User inputs for story generation
 st.title("Image Captioning and Story Generation App")
@@ -120,7 +49,7 @@ if uploaded_files:
                 caption = st.session_state.cached_captions[image_hash]
             else:
                 # Generate and cache the caption
-                caption = generate_caption(image)
+                caption = requests.post(API_HOST + "generate_caption/", files={"file": uploaded_file.getvalue()}).json()["caption"]
                 st.session_state.cached_captions[image_hash] = caption
             image_captions.append(caption)
 
@@ -156,7 +85,8 @@ character_genders = [gender.strip() for gender in character_genders.split(",") i
 
 # Generate the story
 if st.button("Generate the story!"):
-    generated_story = generate_story(genre, num_words, num_characters, reader_age, character_names, character_genders, image_captions)
+    data={"genre": genre, "num_words" : num_words, "num_characters" : num_characters, "reader_age" : reader_age, "character_names" : character_names, "character_genders" : character_genders, "image_captions" : image_captions}
+    generated_story = requests.post(API_HOST + "generate_story/", data=data).json()["story"]
     
     # Save the story and its details in the session state
     story_details = {
